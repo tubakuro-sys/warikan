@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>割り勘アプリ</title>
+<meta name="description" content="メンバーと支払いを入力するだけで、誰が誰にいくら払えばいいかすぐわかる割り勘アプリ">
+<meta property="og:title" content="割り勘アプリ">
+<meta property="og:description" content="メンバーと支払いを入力するだけで、誰が誰にいくら払えばいいかすぐわかる割り勘アプリ">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#2f7d5b">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1f2328; --sub: #6b7280;
+    --line: #e5e7eb; --accent: #2f7d5b; --accent-weak: #e3f1ea;
+    --danger: #c0392b; --plus: #2f7d5b; --minus: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a; --card: #1f2226; --text: #e8eaed; --sub: #9aa0a6;
+      --line: #33373c; --accent: #5cc496; --accent-weak: #22382e;
+      --danger: #ef6b5c; --plus: #5cc496; --minus: #ef6b5c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 16px; display: flex; justify-content: space-between; align-items: center; }
+  h2 { font-size: 1rem; margin: 0 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 auto; min-width: 0; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], input[type=number], select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    padding: 10px 14px; border: none; border-radius: 8px; background: var(--accent); color: #fff;
+    cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+  }
+  button.ghost { background: transparent; color: var(--sub); border: 1px solid var(--line); }
+  button.small { padding: 4px 10px; font-size: .85rem; }
+  button.icon { background: transparent; color: var(--sub); padding: 4px 8px; }
+  button.icon:hover { color: var(--danger); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-weak); border-radius: 999px; padding: 4px 4px 4px 12px; }
+  .chip button { padding: 0 8px; background: transparent; color: var(--sub); }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .checks label {
+    display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 12px; cursor: pointer; user-select: none;
+  }
+  .checks label:has(input:checked) { background: var(--accent-weak); border-color: var(--accent); }
+  .checks input { margin: 0; }
+  .label { font-size: .85rem; color: var(--sub); margin: 8px 0 4px; }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+  ul.list li:first-child { border-top: none; }
+  .grow { flex: 1; min-width: 0; }
+  .meta { font-size: .8rem; color: var(--sub); }
+  .amount { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .plus { color: var(--plus); } .minus { color: var(--minus); }
+  .empty { color: var(--sub); font-size: .9rem; }
+  .total { display: flex; justify-content: space-between; font-size: .9rem; color: var(--sub); margin-bottom: 8px; }
+  .settle li .arrow { color: var(--sub); }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>割り勘アプリ <button class="ghost small" id="resetBtn">リセット</button></h1>
+
+  <section class="card">
+    <h2>メンバー</h2>
+    <form class="row" id="memberForm">
+      <input type="text" id="memberName" placeholder="名前を入力" maxlength="20">
+      <button type="submit">追加</button>
+    </form>
+    <div class="chips" id="members"></div>
+  </section>
+
+  <section class="card">
+    <h2>支払いを追加</h2>
+    <form id="expenseForm">
+      <div class="row">
+        <input type="text" id="expTitle" placeholder="内容（例：居酒屋）" maxlength="40">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="number" id="expAmount" placeholder="金額（円）" min="1" step="1" inputmode="numeric">
+        <select id="expPayer"></select>
+      </div>
+      <div class="label">対象者 <button type="button" class="ghost small" id="toggleAll">全員切替</button></div>
+      <div class="checks" id="expTargets"></div>
+      <button type="submit" style="width:100%">支払いを追加</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>支払い一覧</h2>
+    <div class="total"><span id="expCount"></span><span>合計 <span class="amount" id="expTotal"></span></span></div>
+    <ul class="list" id="expenses"></ul>
+  </section>
+
+  <section class="card">
+    <h2>各自の収支</h2>
+    <ul class="list" id="balances"></ul>
+  </section>
+
+  <section class="card">
+    <h2 style="display:flex;justify-content:space-between;align-items:center">
+      精算方法 <button class="ghost small" id="copyBtn">テキストでコピー</button>
+    </h2>
+    <ul class="list settle" id="settlements"></ul>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'warikan-data-v1';
+let state = load();
+
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (d && Array.isArray(d.members) && Array.isArray(d.expenses)) return d;
+  } catch (e) {}
+  return { members: [], expenses: [], nextId: 1 };
+}
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+const $ = id => document.getElementById(id);
+const yen = n => '¥' + Math.abs(n).toLocaleString('ja-JP');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nameOf = id => (state.members.find(m => m.id === id) || {}).name || '?';
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// 1件の支払いを対象者で分割（端数は支払者以外から順に1円ずつ上乗せ。支払者のみなら支払者）
+function shares(exp) {
+  const n = exp.targets.length;
+  const base = Math.floor(exp.amount / n);
+  let rest = exp.amount - base * n;
+  const order = [...exp.targets.filter(t => t !== exp.payer), ...exp.targets.filter(t => t === exp.payer)];
+  const res = {};
+  exp.targets.forEach(t => res[t] = base);
+  for (const t of order) { if (rest <= 0) break; res[t]++; rest--; }
+  return res;
+}
+
+function balances() {
+  const bal = {};
+  state.members.forEach(m => bal[m.id] = { paid: 0, owe: 0 });
+  for (const e of state.expenses) {
+    if (!bal[e.payer]) continue;
+    bal[e.payer].paid += e.amount;
+    const s = shares(e);
+    for (const id in s) if (bal[id]) bal[id].owe += s[id];
+  }
+  return bal;
+}
+
+// 送金回数を少なくする貪欲法
+function settle(bal) {
+  const cred = [], debt = [];
+  for (const id in bal) {
+    const net = bal[id].paid - bal[id].owe;
+    if (net > 0) cred.push({ id: +id, v: net });
+    else if (net < 0) debt.push({ id: +id, v: -net });
+  }
+  cred.sort((a, b) => b.v - a.v); debt.sort((a, b) => b.v - a.v);
+  const res = [];
+  let i = 0, j = 0;
+  while (i < debt.length && j < cred.length) {
+    const x = Math.min(debt[i].v, cred[j].v);
+    res.push({ from: debt[i].id, to: cred[j].id, amount: x });
+    debt[i].v -= x; cred[j].v -= x;
+    if (debt[i].v === 0) i++;
+    if (cred[j].v === 0) j++;
+  }
+  return res;
+}
+
+function render() {
+  // メンバー
+  $('members').innerHTML = state.members.length
+    ? state.members.map(m => `<span class="chip">${esc(m.name)}<button data-del-member="${m.id}" title="削除">×</button></span>`).join('')
+    : '<span class="empty">メンバーを追加してください</span>';
+
+  // 支払いフォーム
+  const prevPayer = $('expPayer').value;
+  $('expPayer').innerHTML = state.members.map(m => `<option value="${m.id}">${esc(m.name)} が支払い</option>`).join('');
+  if (state.members.some(m => String(m.id) === prevPayer)) $('expPayer').value = prevPayer;
+  const checked = new Set([...document.querySelectorAll('#expTargets input:checked')].map(i => i.value));
+  const firstRender = !$('expTargets').dataset.ready;
+  $('expTargets').innerHTML = state.members.map(m => {
+    const on = firstRender || checked.has(String(m.id)) || !$('expTargets').querySelector(`[value="${m.id}"]`);
+    return `<label><input type="checkbox" value="${m.id}" ${on ? 'checked' : ''}>${esc(m.name)}</label>`;
+  }).join('');
+  $('expTargets').dataset.ready = '1';
+
+  // 支払い一覧
+  const total = state.expenses.reduce((s, e) => s + e.amount, 0);
+  $('expCount').textContent = `${state.expenses.length}件`;
+  $('expTotal').textContent = yen(total);
+  $('expenses').innerHTML = state.expenses.length
+    ? state.expenses.map(e => `
+      <li>
+        <div class="grow">
+          <div>${esc(e.title || '(無題)')}</div>
+          <div class="meta">${esc(nameOf(e.payer))} が支払い ／ 対象: ${e.targets.length === state.members.length ? '全員' : e.targets.map(t => esc(nameOf(t))).join('、')}</div>
+        </div>
+        <span class="amount">${yen(e.amount)}</span>
+        <button class="icon" data-del-exp="${e.id}" title="削除">×</button>
+      </li>`).join('')
+    : '<li class="empty">まだ支払いがありません</li>';
+
+  // 収支
+  const bal = balances();
+  $('balances').innerHTML = state.members.length
+    ? state.members.map(m => {
+        const b = bal[m.id], net = b.paid - b.owe;
+        const cls = net > 0 ? 'plus' : net < 0 ? 'minus' : '';
+        const sign = net > 0 ? '+' : net < 0 ? '−' : '';
+        return `<li><div class="grow">${esc(m.name)}<div class="meta">支払 ${yen(b.paid)} ／ 負担 ${yen(b.owe)}</div></div>
+          <span class="amount ${cls}">${sign}${yen(net)}</span></li>`;
+      }).join('')
+    : '<li class="empty">メンバーがいません</li>';
+
+  // 精算
+  const st = settle(bal);
+  $('settlements').innerHTML = st.length
+    ? st.map(s => `<li><div class="grow">${esc(nameOf(s.from))} <span class="arrow">→</span> ${esc(nameOf(s.to))}</div><span class="amount">${yen(s.amount)}</span></li>`).join('')
+    : '<li class="empty">精算の必要はありません</li>';
+}
+
+// イベント
+$('memberForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('memberName').value.trim();
+  if (!name) return;
+  if (state.members.some(m => m.name === name)) { toast('同じ名前がすでにあります'); return; }
+  state.members.push({ id: state.nextId++, name });
+  $('memberName').value = '';
+  save(); render();
+});
+
+$('members').addEventListener('click', e => {
+  const id = +e.target.dataset.delMember;
+  if (!id) return;
+  const used = state.expenses.some(x => x.payer === id || x.targets.includes(id));
+  if (used && !confirm(`${nameOf(id)} が関係する支払いも削除されます。よろしいですか？`)) return;
+  state.members = state.members.filter(m => m.id !== id);
+  state.expenses = state.expenses.filter(x => x.payer !== id && !x.targets.includes(id));
+  save(); render();
+});
+
+$('toggleAll').addEventListener('click', () => {
+  const boxes = [...document.querySelectorAll('#expTargets input')];
+  const allOn = boxes.every(b => b.checked);
+  boxes.forEach(b => b.checked = !allOn);
+});
+
+$('expenseForm').addEventListener('submit', e => {
+  e.preventDefault();
+  if (!state.members.length) { toast('先にメンバーを追加してください'); return; }
+  const amount = Math.round(Number($('expAmount').value));
+  if (!(amount > 0)) { toast('金額を入力してください'); return; }
+  const targets = [...document.querySelectorAll('#expTargets input:checked')].map(i => +i.value);
+  if (!targets.length) { toast('対象者を選んでください'); return; }
+  state.expenses.push({
+    id: state.nextId++, title: $('expTitle').value.trim(), amount,
+    payer: +$('expPayer').value, targets
+  });
+  $('expTitle').value = ''; $('expAmount').value = '';
+  save(); render(); toast('追加しました');
+});
+
+$('expenses').addEventListener('click', e => {
+  const id = +e.target.dataset.delExp;
+  if (!id) return;
+  state.expenses = state.expenses.filter(x => x.id !== id);
+  save(); render();
+});
+
+$('copyBtn').addEventListener('click', async () => {
+  const total = state.expenses.reduce((s, e) => s + e.amount, 0);
+  const st = settle(balances());
+  const lines = ['【割り勘精算】', `合計: ${yen(total)}（${state.expenses.length}件）`, ''];
+  lines.push(...(st.length ? st.map(s => `${nameOf(s.from)} → ${nameOf(s.to)}: ${yen(s.amount)}`) : ['精算の必要はありません']));
+  try { await navigator.clipboard.writeText(lines.join('\n')); toast('コピーしました'); }
+  catch { prompt('コピーしてください', lines.join('\n')); }
+});
+
+$('resetBtn').addEventListener('click', () => {
+  if (!confirm('メンバーと支払いをすべて削除します。よろしいですか？')) return;
+  state = { members: [], expenses: [], nextId: 1 };
+  $('expTargets').dataset.ready = '';
+  save(); render();
+});
+
+render();
+</script>
+</body>
+</html>
